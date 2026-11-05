@@ -19,7 +19,7 @@ jobs:
         run: npm ci
 
       - name: Build for Cloudflare
-        run: npx opennextjs-cloudflare
+        run: npx opennextjs-cloudflare build
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
