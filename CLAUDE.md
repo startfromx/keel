@@ -1,0 +1,9 @@
+- Read PLAN.md and brief-recipe-v1.yaml before any work.
+- Each milestone has a spec in tasks/M<n>-spec.md; read it before starting.
+- Engine code must never contain brief-specific logic; everything comes from the recipe.
+- Rules engine is pure TypeScript with unit tests; AI never decides statuses alone.
+- Never auto-apply AI changes to nodes; always via a proposal the user applies.
+- Private notes must never be included in shareable outputs (enforce in code).
+- Supabase RLS on every table. No secrets in client code.
+- Small, surgical changes. Explain the plan before editing files.
+- Work one milestone at a time; stop and show me when its "done when" is met.
