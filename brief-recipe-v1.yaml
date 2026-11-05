@@ -1,0 +1,474 @@
+# ─────────────────────────────────────────────────────────────
+# BRIEF RECIPE · v1.0
+# First module for the Brief Map engine (MOS).
+# Loaded by Recipe Studio as the first published version.
+# Everything here is editable by the owner without code changes.
+# ─────────────────────────────────────────────────────────────
+
+recipe:
+  module: brief
+  version: 1.0.0
+  status: published
+  title: Brief Desk
+  description: >
+    Turns a rough brief, a vague ask or a pile of research into a brief a team
+    can execute, with every part's status visible and every decision defensible.
+  depends_on: []            # later: brand, marketing, creative can plug in via ports
+
+# ── STATUSES (engine-level, listed here so Studio can relabel them) ──
+statuses:
+  confirmed:    { label: Confirmed,    meaning: "Backed by the client's own words or verified data." }
+  drafted:      { label: Drafted,      meaning: "Our proposal, reasoned from evidence, awaiting client confirmation." }
+  vague:        { label: Vague,        meaning: "Present in the brief but not specific enough to act on." }
+  missing:      { label: Missing,      meaning: "Not in the brief and not inferable. Becomes a client question." }
+  rejected:     { label: Rejected,     meaning: "Considered and set aside. Kept on the map with the reason." }
+  needs_review: { label: Needs review, meaning: "An upstream node changed after this was written." }
+  changed:      { label: Changed,      meaning: "Content updated in this session; downstream flagged." }
+
+# ── GLOBAL RULES (apply to every node) ──
+rules:
+  cap: >
+    A node can never be "confirmed" while any REQUIRED input is "missing".
+    Show the cap note: "Can't be confirmed yet. Waiting on: <inputs>."
+  propagation: >
+    When a node's content changes, every downstream node built on the old
+    version becomes "needs_review". Optional inputs propagate too.
+  assumptions: >
+    When a required input is missing, the node may still be drafted, but must
+    state the assumption standing in for it, in one line. That line is shown
+    on the wire.
+  never_invent: >
+    Never invent facts, numbers, competitor claims, reviews, quotes, dates or
+    client approvals. Unknowns are marked [CONFIRM] and become client questions.
+    Quote only numbers present in the inputs.
+  evidence: >
+    Every drafted claim carries a one-line "why" the user can say out loud
+    when challenged.
+  ownership: >
+    All outputs go out under the user's name. Never mention the tool, AI or
+    the agency's internal process inside a deliverable.
+  sensitivity: >
+    Findings that could embarrass someone (a boss's pet project, an incumbent
+    agency, internal politics) go only to the private notes field, framed as
+    an opportunity. Never into shareable outputs.
+  fit: Fit every recommendation to the real budget, team and timeline.
+
+# ── VOICE (switches on the intake "role" field) ──
+voice:
+  base: >
+    Plain words for a smart non-expert. Short sentences. Opinionated: push back
+    when the ask is wrong, with evidence. Explain any jargon in one line.
+  client_side: >
+    The user writes or defends the brief. Optimise for: looking prepared in
+    front of their boss, defending decisions upward, a paper trail.
+  agency: >
+    The user received the brief. Optimise for: asking the client the right
+    questions without sounding junior, protecting the team from rework.
+
+# ── DOORS (backdrops on the canvas) ──
+doors:
+  - { key: research,  label: "Research Interpreter", order: 1, color: teal }
+  - { key: objective, label: "Objective Finder",     order: 2, color: blue }
+  - { key: brief,     label: "Brief Decoder",        order: 3, color: violet }
+  - { key: outputs,   label: "Outputs",              order: 4, color: grey }
+
+# ── INTAKE (form fields → ports available to every node) ──
+intake:
+  provides: [role, brand, due_date, brief_raw, attachments, start_door]
+  build_prompt: >
+    You are building a brief map from a rough input. Read the brief as given
+    and every attachment. For EACH node type in this recipe, produce content
+    that fits its schema and a status following its status_rules. Do not skip
+    nodes: an unknown node is "missing" with its [CONFIRM] question, not absent.
+    Do light desk research only where a node's prompt allows it, and cite the
+    source for every researched fact. Return JSON only, valid against the
+    schemas.
+
+# ─────────────────────────────────────────────────────────────
+# NODE TYPES
+# requires = needed to reach "confirmed"; optional = used if present.
+# provides = the port key other nodes (and other modules) connect to.
+# ─────────────────────────────────────────────────────────────
+nodes:
+
+  # ── DOOR: RESEARCH ─────────────────────────────────────────
+  - key: market_facts
+    label: Market facts
+    door: research
+    requires: [brand, brief_raw]
+    optional: [attachments]
+    provides: market_facts
+    schema:
+      facts: [{ fact: string, source: string, why_it_matters: string }]
+    research_allowed: true
+    status_rules:
+      confirmed: "Every fact has a verifiable source."
+      vague: "Facts found but sources weak or dated."
+      missing: "Nothing relevant found."
+    prompt: >
+      Find the 2-5 facts about timing, season, category or market that most
+      change this brief (festival dates, overlapping seasons, regulation,
+      category trend). For each, say in one line why it matters to this brief.
+      Prefer facts that reframe the ask over facts that decorate it.
+
+  - key: competitor_moves
+    label: Competitor moves
+    door: research
+    requires: [brand, brief_raw]
+    optional: [attachments]
+    provides: competitor_moves
+    schema:
+      competitors: [{ name: string, move: string, source: string }]
+      white_space: string
+    research_allowed: true
+    status_rules:
+      confirmed: "3+ real competitors with sourced, recent moves."
+      vague: "Fewer than 3, or moves older than 18 months."
+      missing: "No competitor evidence."
+    prompt: >
+      Name the 3-5 competitors this work will be compared against in the
+      customer's mind, and what each did in the same season or category
+      recently. End with one line: where nobody is standing.
+
+  - key: own_data
+    label: Own data
+    door: research
+    requires: [attachments]
+    provides: own_data
+    schema:
+      what_we_have: string
+      what_we_need: string
+      assumption_if_missing: string
+      client_question: string
+    status_rules:
+      confirmed: "Client's own sales or customer data is attached and readable."
+      missing: "No own data. State the assumption it would prove or break."
+    prompt: >
+      Identify the client's own data that decides this brief (sales by
+      region/outlet/segment, repeat rate, past campaign results). If absent,
+      write the single assumption the brief is currently resting on, and the
+      question that gets the data, phrased so a junior can ask it.
+
+  - key: research_readout
+    label: Research readout
+    door: research
+    requires: [attachments]
+    provides: research_findings
+    only_when: "an attachment contains research data (survey, tasting, focus group, listening, sales report)"
+    schema:
+      headline_decision: string
+      method_caveats: [string]
+      insights: [{ what: string, so_what: string, now_what: string }]
+      the_split: string
+      cannot_tell_us: string
+      next_test: string
+    status_rules:
+      confirmed: "Method is sound and every insight has a so-what and now-what."
+      vague: "Method weaknesses that limit the conclusion (state them)."
+    prompt: >
+      Check the method first: sample size, who, where, how, against what
+      benchmark. Then for every finding write What (the number) / So what (for
+      the business) / Now what (the decision or test). Drop findings with no
+      so-what. Hunt for where segments disagree: averages hide the story.
+      End with one headline: the single decision this research supports.
+
+  # ── DOOR: OBJECTIVE ────────────────────────────────────────
+  - key: business_problem
+    label: Business problem
+    door: objective
+    requires: [brief_raw, own_data]
+    optional: [market_facts, competitor_moves, research_findings]
+    provides: business_problem
+    schema:
+      the_ask: string
+      the_real_problem: string
+      problem_type: { enum: [trial, repeat, price, distribution, perception, awareness, operational, other] }
+      evidence: [string]
+      challenge: string
+    status_rules:
+      confirmed: "Client agrees AND own_data supports it."
+      drafted: "Reasoned from evidence; own_data missing or unconfirmed."
+      vague: "The brief states a goal but no problem."
+    prompt: >
+      Restate the ask in one line. Then name the business problem the ask
+      assumes, and the one the evidence points to. If they differ, say so
+      plainly ("You asked for awareness; people know you and still don't buy").
+      If the problem is operational (product, price, distribution), say that
+      comms alone won't fix it.
+
+  - key: objective
+    label: Objective
+    door: objective
+    requires: [business_problem]
+    provides: objective
+    schema:
+      business_objective: string
+      marketing_objective: { who: string, behaviour: string, how_much: string, by_when: string }
+      communication_objective: string
+    status_rules:
+      confirmed: "Client confirmed all three levels with a number and date."
+      drafted: "Ladder proposed with [CONFIRM] on the numbers."
+      vague: "Objective has no number, audience or date."
+    prompt: >
+      Build the ladder: business objective → marketing objective (who, what
+      behaviour, how much, by when) → communication objective (what they must
+      think or feel). Every level measurable, or marked [CONFIRM].
+
+  - key: rejected_option
+    label: Rejected option
+    door: objective
+    requires: [business_problem]
+    optional: [objective]
+    provides: rejected_options
+    repeatable: true
+    schema:
+      option: string
+      why_it_loses: string
+      say_this_if_raised: string
+    default_status: rejected
+    prompt: >
+      Name the most tempting wrong approach (often the literal ask), why it
+      loses against the business problem, and the one line to say if someone
+      in the room raises it again. Keep it respectful: it was a reasonable idea.
+
+  # ── DOOR: BRIEF ────────────────────────────────────────────
+  - key: audience
+    label: Audience
+    door: brief
+    requires: [objective]
+    optional: [own_data, research_findings]
+    provides: audience
+    schema:
+      who: string
+      think_now: string
+      want_them_to_think: string
+    status_rules:
+      confirmed: "Backed by client data or confirmed by client."
+      drafted: "Inferred; think_now marked [CONFIRM] if unverified."
+    prompt: >
+      Describe the audience as people in a situation, not demographics alone.
+      State what they think now (with evidence or [CONFIRM]) and what we need
+      them to think.
+
+  - key: reason_to_believe
+    label: Reason to believe
+    door: brief
+    requires: [brief_raw]
+    optional: [market_facts]
+    provides: reason_to_believe
+    schema:
+      reasons: [{ claim: string, proof: string }]
+    status_rules:
+      confirmed: "Every claim has proof the client can stand behind."
+      vague: "Claims without proof."
+    prompt: >
+      List at most 3 reasons the message is true, each with its proof. Drop any
+      claim the client couldn't defend to a regulator or a sceptical customer.
+
+  - key: single_message
+    label: Single message
+    door: brief
+    requires: [audience, objective]
+    optional: [reason_to_believe, competitor_moves, target_word]   # target_word comes from the future brand module
+    provides: single_message
+    schema:
+      message: string
+      why_this: string
+      not_saying: [string]
+    status_rules:
+      drafted: "Proposed; becomes confirmed only when the client signs it off."
+    prompt: >
+      Write ONE thing the audience should take away, in one sentence a creative
+      team can build on. Then list what we are deliberately NOT saying. If the
+      brief asks for several messages, pick one and park the others here.
+      If a target_word is provided by the brand module, the message must hold it.
+
+  - key: mandatories
+    label: Mandatories
+    door: brief
+    requires: [brief_raw]
+    provides: mandatories
+    schema:
+      items: [string]
+      sensitivities: [string]
+    status_rules:
+      confirmed: "Client listed them."
+      missing: "None stated: ask."
+    prompt: >
+      List required elements (logo, legal lines, pricing, product shots,
+      certification marks) and cultural or regulatory sensitivities for this
+      audience and season. Mark anything assumed as [CONFIRM].
+
+  - key: deliverables
+    label: Deliverables
+    door: brief
+    requires: [single_message, timing, budget]
+    optional: [mandatories]
+    provides: deliverables
+    schema:
+      items: [{ asset: string, channel: string, length_or_size: string }]
+      note: string
+    status_rules:
+      confirmed: "Assets, channels and sizes agreed."
+      vague: "Format named without channels or sizes (e.g. 'a TVC')."
+    prompt: >
+      Translate the ask into concrete assets per channel. If the brief names a
+      format loosely ("TVC", "some posts"), propose the likely set and ask
+      which screens matter most.
+
+  - key: timing
+    label: Timing
+    door: brief
+    requires: [brief_raw]
+    optional: [market_facts]
+    provides: timing
+    schema:
+      live_date: string
+      phases: [{ name: string, from: string, to: string }]
+      critical_path: string
+    status_rules:
+      confirmed: "Live date confirmed by client."
+      vague: "Season named, no date."
+    prompt: >
+      Work backwards from the live date to what must be signed off when. If the
+      timeline is tight, say the sign-off date that makes it possible.
+
+  - key: budget
+    label: Budget
+    door: brief
+    requires: [brief_raw]
+    provides: budget
+    schema: { production: string, media: string }
+    status_rules:
+      confirmed: "Range given by client."
+      missing: "Not stated: ask for a range, not a number."
+    prompt: >
+      Extract budget if stated. If not, write the question asking for a range,
+      framed as "so we recommend something you can actually run".
+
+  - key: approver
+    label: Approver
+    door: brief
+    requires: [brief_raw]
+    provides: approver
+    schema: { final_approver: string, review_steps: [string] }
+    status_rules:
+      confirmed: "Named by client."
+      missing: "Unknown: ask."
+    prompt: >
+      Identify who signs off and any review steps (legal, regional, cultural).
+      If unknown, ask in a way that doesn't imply distrust.
+
+  - key: success_measure
+    label: Success measure
+    door: brief
+    requires: [objective]
+    provides: success_measure
+    schema: { measures: [{ metric: string, target: string, source: string }] }
+    status_rules:
+      confirmed: "Metric, target and data source agreed."
+      drafted: "Metrics proposed, targets [CONFIRM]."
+    prompt: >
+      Propose 1-3 measures tied to the marketing objective, not vanity metrics.
+      Name where each number will come from.
+
+  # ── DOOR: OUTPUTS (generated from the map, never edited by hand) ──
+  - key: red_flags
+    label: Red flags
+    door: outputs
+    optional: ["*"]
+    provides: red_flags
+    schema: { flags: [{ flag: string, say_this: string }] }
+    checks:
+      - several messages in one brief
+      - no budget
+      - objective contradicts audience
+      - deadline needs sign-off sooner than the client expects
+      - no approver
+      - format named with no channel
+      - product or offer that doesn't fit the stated occasion or audience
+    prompt: >
+      Run the checks against the map. For each flag found, give the exact line
+      the user can say about it, calm and non-accusing.
+
+  - key: client_questions
+    label: Questions for the client
+    door: outputs
+    optional: ["*"]
+    provides: client_questions
+    schema: { questions: [{ question: string, unlocks: string }] }
+    rules: "Max 7, ranked by how much each answer changes the map."
+    prompt: >
+      Collect every [CONFIRM] and missing node. Merge, rank by impact, keep 7.
+      Phrase each so a junior can ask it without sounding junior ("To make sure
+      we land this right, can we confirm…"). Note which node each one unlocks.
+
+  - key: reverse_brief
+    label: Reverse brief
+    door: outputs
+    optional: ["*"]
+    provides: reverse_brief
+    shareable: true
+    prompt: >
+      Write the client-ready brief from the map, one line per node, [CONFIRM]
+      where not confirmed, ready to send back for sign-off.
+
+  - key: boss_summary
+    label: Boss view
+    door: outputs
+    optional: ["*"]
+    provides: boss_summary
+    shareable: true
+    prompt: >
+      One page. A headline recommendation in one sentence, max 5 bullets of
+      evidence, one "considered and set aside" line from rejected_options, and
+      "to start, we need" from client_questions. No statuses, no threads, no jargon.
+
+  - key: team_briefing
+    label: Creative team briefing
+    door: outputs
+    only_when: "role == agency"
+    optional: ["*"]
+    provides: team_briefing
+    prompt: >
+      Five lines for the creative team: the real problem, the one message, the
+      audience, the main constraint, and how to beat the strongest competitor.
+
+  - key: private_notes
+    label: Private notes
+    door: outputs
+    optional: ["*"]
+    provides: private_notes
+    shareable: false
+    prompt: >
+      Things the user should know but never share: incumbent agencies,
+      internal ownership of competing products, political risk in the
+      recommendation. Framed as opportunities.
+
+# ── THREADS (per-node chat) ──
+threads:
+  context: "The node in full, its direct parents in full, further ancestors summarised."
+  prompt: >
+    You are answering about one part of the brief. Stay on this node. If the
+    user pastes a client answer, propose the updated node content and status,
+    and list which downstream nodes it would flag for review. Never apply an
+    update without the user pressing "Apply to brief".
+  quick_actions:
+    - "What will my boss ask about this?"
+    - "Say this more simply"
+    - "Draft the question to the client"
+    - "Here's the client's answer"
+
+# ── TEST BRIEFS (Recipe Studio runs these before publishing a new version) ──
+tests:
+  - name: Marrybrown festive 2027
+    role: agency
+    brand: Marrybrown
+    brief_raw: "We want a TVC for CNY and Raya this year. Main thing is to push our egg chicken."
+    expect:
+      - business_problem mentions the CNY and Ramadan overlap in 2027
+      - own_data is missing with an assumption about who buys the product
+      - rejected_option includes "two separate ads"
+      - deliverables is vague (format named, no channel)
+      - client_questions has 7 or fewer items
+  # add 2-3 more real briefs here before v1.1
