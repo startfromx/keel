@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { WorkspaceSidebar, type WorkspaceBrief } from '@/components/navigation/WorkspaceSidebar'
+import { NewProjectComposer } from '@/components/dashboard/NewProjectComposer'
+import { NewProjectTrigger } from '@/components/dashboard/NewProjectTrigger'
 
 const STATUS_COLORS: Record<string, string> = {
   confirmed: 'bg-emerald-400',
@@ -11,7 +14,12 @@ const STATUS_COLORS: Record<string, string> = {
   needs_review: 'bg-orange-400',
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>
+}) {
+  const { new: newProject } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/sign-in')
@@ -65,51 +73,59 @@ export default async function DashboardPage() {
     revalidatePath('/dashboard')
   }
 
-  return (
-    <main className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <span className="text-sm font-semibold text-gray-900">Keel</span>
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-gray-400">{user.email}</span>
-          <form action={signOut}>
-            <button type="submit" className="text-xs text-gray-400 underline hover:text-gray-600">
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
+  const sidebarBriefs = (briefs ?? []) as WorkspaceBrief[]
 
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-lg font-semibold text-gray-900">Briefs</h1>
-          <div className="flex items-center gap-3">
-            <a href="/dashboard/recipes" className="text-sm text-gray-500 hover:text-gray-900">Recipe Studio</a>
-            <a href="/dashboard/new" className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors">New brief</a>
+  return (
+    <main className="flex min-h-screen bg-[#fbfbfa]">
+      <WorkspaceSidebar briefs={sidebarBriefs} email={user.email} />
+      <section className="min-w-0 flex-1">
+        <header className="flex items-center justify-between border-b border-gray-200 bg-[#fbfbfa] px-10 py-7">
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-gray-400">Workspace</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-950">All projects</h1>
           </div>
-        </div>
+          <div className="flex items-center gap-4">
+            <form action={signOut}>
+              <button type="submit" className="text-xs text-gray-400 hover:text-gray-700">Sign out</button>
+            </form>
+            <NewProjectTrigger className="rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-gray-700">New project</NewProjectTrigger>
+          </div>
+        </header>
+
+        <div className="mx-auto max-w-5xl px-10 py-10">
+          <NewProjectComposer initialOpen={newProject === '1'} />
+          <div className="mb-5 flex items-end justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Recent work</h2>
+              <p className="mt-1 text-sm text-gray-500">Projects grouped by account, with every brief close at hand.</p>
+            </div>
+            <span className="text-xs text-gray-400">{briefs?.length ?? 0} {briefs?.length === 1 ? 'project' : 'projects'}</span>
+          </div>
 
         {!briefs?.length ? (
-          <p className="text-sm text-gray-400">No briefs yet.</p>
+          <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-14 text-center">
+            <p className="text-sm font-medium text-gray-800">No projects yet</p>
+            <p className="mt-1 text-sm text-gray-400">Start with a client account and a project brief.</p>
+            <NewProjectTrigger className="mt-5 inline-flex rounded-lg bg-gray-950 px-4 py-2 text-sm font-medium text-white">Create a project</NewProjectTrigger>
+          </div>
         ) : (
-          <div className="grid gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             {briefs.map(brief => {
               const health = healthByBrief[brief.id] ?? {}
               const total = Object.values(health).reduce((a, b) => a + b, 0)
               return (
                 <div
                   key={brief.id}
-                  className="group bg-white rounded-lg border border-gray-200 hover:border-gray-400 hover:shadow-sm transition-all flex items-stretch"
+                  className="group flex items-stretch rounded-xl border border-gray-200 bg-white transition-all hover:border-gray-400 hover:shadow-sm"
                 >
                   <a
                     href={`/dashboard/briefs/${brief.id}`}
-                    className="flex-1 px-5 py-4 block"
+                    className="block flex-1 px-5 py-5"
                   >
-                    <div className="flex items-start justify-between">
+                    <div className="mb-7 flex items-start justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{brief.title}</p>
-                        {brief.brand && (
-                          <p className="text-xs text-gray-400 mt-0.5">{brief.brand}</p>
-                        )}
+                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">{brief.brand ?? 'Unassigned'}</p>
+                        <p className="text-base font-medium text-gray-950">{brief.title.replace(`${brief.brand} · `, '')}</p>
                       </div>
                       {total > 0 && (
                         <div className="flex gap-1 mt-1">
@@ -123,6 +139,10 @@ export default async function DashboardPage() {
                           )}
                         </div>
                       )}
+                    </div>
+                    <div className="flex items-center justify-between border-t border-gray-100 pt-3 text-xs text-gray-400">
+                      <span>{brief.brief_type ? brief.brief_type.replace(/_/g, ' ') : 'Working brief'}</span>
+                      <span className="text-gray-300 transition-colors group-hover:text-gray-600">Open project →</span>
                     </div>
                   </a>
                   <div className="flex items-center pr-3 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -142,7 +162,8 @@ export default async function DashboardPage() {
             })}
           </div>
         )}
-      </div>
+        </div>
+      </section>
     </main>
   )
 }

@@ -6,6 +6,8 @@ import { DetailPanelHeader } from './DetailPanelHeader'
 interface GoalPanelProps {
   goal: string
   output?: string
+  width: number
+  onWidthChange: (width: number) => void
   building?: boolean
   error?: string | null
   changes?: {
@@ -17,8 +19,7 @@ interface GoalPanelProps {
   onClose: () => void
 }
 
-export function GoalPanel({ goal, output, building = false, error, changes, onClose }: GoalPanelProps) {
-  const [width, setWidth] = useState(320)
+export function GoalPanel({ goal, output, width, onWidthChange, building = false, error, changes, onClose }: GoalPanelProps) {
   const [resizing, setResizing] = useState(false)
   const [progressStep, setProgressStep] = useState(0)
   const [changesUnread, setChangesUnread] = useState(false)
@@ -50,7 +51,7 @@ export function GoalPanel({ goal, output, building = false, error, changes, onCl
     if (!resizing) return
     document.body.style.cursor = 'col-resize'
     function resize(event: MouseEvent) {
-      setWidth(Math.min(640, Math.max(320, window.innerWidth - event.clientX)))
+      onWidthChange(Math.min(640, Math.max(320, window.innerWidth - event.clientX)))
     }
     function stopResize() {
       setResizing(false)
@@ -62,7 +63,7 @@ export function GoalPanel({ goal, output, building = false, error, changes, onCl
       window.removeEventListener('mousemove', resize)
       window.removeEventListener('mouseup', stopResize)
     }
-  }, [resizing])
+  }, [onWidthChange, resizing])
 
   return (
     <aside className="absolute top-0 right-0 z-10 flex h-full flex-col border-l border-gray-200 bg-white shadow-lg" style={{ width }}>
@@ -75,7 +76,7 @@ export function GoalPanel({ goal, output, building = false, error, changes, onCl
         title="Goal recommendation"
         subtitle={goal}
         expanded={isExpanded}
-        onToggleExpand={() => setWidth(isExpanded ? 320 : 640)}
+        onToggleExpand={() => onWidthChange(isExpanded ? 320 : 640)}
         onClose={onClose}
       />
       <div className="flex-1 overflow-y-auto px-4 py-3">

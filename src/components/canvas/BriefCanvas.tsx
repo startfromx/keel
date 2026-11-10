@@ -112,6 +112,7 @@ export function BriefCanvas({ initialNodes, initialEdges, initialChainIds = [], 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
   const [showGoalPanel, setShowGoalPanel] = useState(false)
+  const [detailPanelWidth, setDetailPanelWidth] = useState(320)
   const [error, setError] = useState<string | null>(null)
   const [palette, setPalette] = useState<PaletteNode[]>([])
   const [showPalette, setShowPalette] = useState(false)
@@ -457,6 +458,8 @@ export function BriefCanvas({ initialNodes, initialEdges, initialChainIds = [], 
         <NodePanel
           nodeId={selectedNodeId}
           data={selectedData}
+          width={detailPanelWidth}
+          onWidthChange={setDetailPanelWidth}
           onClose={() => { setSelectedData(null); setSelectedNodeId(null) }}
           onApplied={() => window.location.reload()}
         />
@@ -465,6 +468,8 @@ export function BriefCanvas({ initialNodes, initialEdges, initialChainIds = [], 
         <GoalPanel
           goal={String(nodes.find(node => node.id === 'goal-output')?.data?.goal ?? 'Campaign Brief')}
           output={goalOutput}
+          width={detailPanelWidth}
+          onWidthChange={setDetailPanelWidth}
           building={buildingGoal}
           error={goalError}
           changes={goalChanges}

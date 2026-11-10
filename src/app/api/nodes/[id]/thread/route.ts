@@ -33,6 +33,14 @@ function asGraphNode(row: Record<string, unknown>): GraphNode {
   }
 }
 
+function getAtPath(value: unknown, path: string) {
+  return path.split('.').reduce<unknown>((current, part) => {
+    if (Array.isArray(current)) return current[Number(part)]
+    if (current && typeof current === 'object') return (current as Record<string, unknown>)[part]
+    return undefined
+  }, value)
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -57,7 +65,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const body = await request.json() as { text?: string }
+  const body = await request.json() as { text?: string; target_section?: string; current_value?: unknown; mode?: 'proposal' | 'client_question' }
   const text = body.text?.trim()
   if (!text) return NextResponse.json({ error: 'Message is required' }, { status: 400 })
 
@@ -67,6 +75,7 @@ export async function POST(
 
   const { data: node } = await supabase.from('nodes').select('*').eq('id', id).single()
   if (!node) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const currentTargetValue = body.target_section ? getAtPath(node.content, body.target_section) : undefined
 
   const { error: userThreadError } = await supabase.from('threads').insert({ node_id: id, role: 'user', text })
   if (userThreadError) return NextResponse.json({ error: userThreadError.message }, { status: 500 })
@@ -87,6 +96,29 @@ export async function POST(
 
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    if (body.mode === 'client_question') {
+      const questionResponse = await client.messages.create({
+        model: process.env.THREAD_MODEL ?? 'claude-sonnet-4-6',
+        max_tokens: 500,
+        system: 'Turn the user request into one concise, client-facing question. Do not answer it, do not revise the node, and do not add commentary. Return only the question.',
+        messages: [{
+          role: 'user',
+          content: [
+            `Node: ${node.type_key}`,
+            `Current paragraph or section: ${JSON.stringify(currentTargetValue ?? node.content)}`,
+            `What the client needs to confirm: ${text}`,
+          ].join('\n\n'),
+        }],
+      })
+      const question = questionResponse.content
+        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+        .map(block => block.text.trim())
+        .join(' ')
+      if (!question) throw new Error('AI returned no client question')
+      await supabase.from('threads').insert({ node_id: id, role: 'ai', text: `[CLIENT QUESTION] ${question}` })
+      return NextResponse.json({ client_question: question })
+    }
+
     const response = await client.messages.create({
       model: process.env.THREAD_MODEL ?? 'claude-sonnet-4-6',
       max_tokens: 2500,
@@ -99,6 +131,9 @@ export async function POST(
           `Current content: ${JSON.stringify(node.content)}`,
           `Relevant upstream context: ${JSON.stringify(context)}`,
           `User message: ${text}`,
+          body.target_section
+            ? `Target section: ${body.target_section}\nCurrent target value: ${JSON.stringify(body.current_value ?? currentTargetValue)}\nThis is a targeted inline request. Return proposed_content with only one key, exactly "${body.target_section}", whose value is the replacement for that section. Do not rewrite unrelated sections.`
+            : '',
           'Propose the smallest defensible update and explain the rationale.',
         ].join('\n\n'),
       }],
@@ -109,9 +144,16 @@ export async function POST(
     if (!toolUse) throw new Error('AI returned no proposal')
     const result = toolUse.input as { proposed_content: Record<string, unknown>; proposed_status: NodeStatus; rationale: string }
     const propagation = propagate(id, currentEdges, currentNodes)
+    const proposedContent = body.target_section
+      ? {
+          __keel_target_section: body.target_section,
+          __keel_current_value: body.current_value ?? currentTargetValue ?? null,
+          __keel_proposed_value: result.proposed_content[body.target_section] ?? getAtPath(result.proposed_content, body.target_section) ?? result.proposed_content,
+        }
+      : result.proposed_content
     const { data: proposal, error: proposalError } = await supabase.from('proposals').insert({
       node_id: id,
-      proposed_content: result.proposed_content,
+      proposed_content: proposedContent,
       proposed_status: result.proposed_status,
       affects: propagation,
     }).select('id, proposed_content, proposed_status, affects, state, created_at').single()

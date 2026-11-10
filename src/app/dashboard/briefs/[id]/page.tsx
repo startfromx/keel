@@ -6,6 +6,7 @@ import { loadRecipeFromFile, getNodeDef } from '@/lib/recipe/loader'
 import { BriefCanvas } from '@/components/canvas/BriefCanvas'
 import { BuildingOverlay } from '@/components/canvas/BuildingOverlay'
 import type { BriefNodeData } from '@/components/canvas/BriefNode'
+import { WorkspaceSidebar, type WorkspaceBrief } from '@/components/navigation/WorkspaceSidebar'
 
 export default async function CanvasPage({
   params,
@@ -21,12 +22,22 @@ export default async function CanvasPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/sign-in')
 
-  const [{ data: brief }, { data: dbNodes }] = await Promise.all([
+  const [{ data: brief }, { data: dbNodes }, { data: workspaces }] = await Promise.all([
     supabase.from('briefs').select('*').eq('id', id).single(),
     supabase.from('nodes').select('*').eq('brief_id', id).order('created_at'),
+    supabase.from('workspaces').select('id').eq('owner_id', user.id),
   ])
 
   if (!brief) redirect('/dashboard')
+
+  const workspaceIds = (workspaces ?? []).map(workspace => workspace.id)
+  const { data: workspaceBriefs } = workspaceIds.length
+    ? await supabase
+        .from('briefs')
+        .select('id, title, brand, brief_type, goal')
+        .in('workspace_id', workspaceIds)
+        .order('created_at', { ascending: false })
+    : { data: [] }
 
   const LABEL_MAP: Record<string, string> = {
     market_facts: 'Market facts',
@@ -106,29 +117,30 @@ export default async function CanvasPage({
   const flowEdges: Edge[] = []
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      <header className="flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-200 shrink-0">
-        <a href="/dashboard" className="text-sm text-gray-400 hover:text-gray-600">← Briefs</a>
-        <span className="text-gray-200">|</span>
-        <div>
-          <span className="text-sm font-semibold text-gray-900">{brief.title}</span>
-          {brief.brand && (
-            <span className="ml-2 text-xs text-gray-400">{brief.brand}</span>
-          )}
-        </div>
-      </header>
+    <div className="flex h-screen bg-gray-50">
+      <WorkspaceSidebar briefs={(workspaceBriefs ?? []) as WorkspaceBrief[]} email={user.email} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-[68px] shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-6">
+          <a href="/dashboard" className="text-sm text-gray-400 hover:text-gray-600">All projects</a>
+          <span className="text-gray-200">/</span>
+          <div className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-gray-900">{brief.title}</span>
+            {brief.brand && <span className="text-xs text-gray-400">{brief.brand}</span>}
+          </div>
+        </header>
 
-      <div className="flex-1 relative">
-        <BriefCanvas
-          briefId={id}
-          initialNodes={flowNodes}
-          initialEdges={flowEdges}
-          initialChainIds={canvasState.chainIds ?? []}
-          initialGoalOutput={canvasState.goalOutput}
-          title={brief.title}
-          brand={brief.brand}
-        />
-        {building === 'true' && <BuildingOverlay briefId={id} />}
+        <div className="relative flex-1">
+          <BriefCanvas
+            briefId={id}
+            initialNodes={flowNodes}
+            initialEdges={flowEdges}
+            initialChainIds={canvasState.chainIds ?? []}
+            initialGoalOutput={canvasState.goalOutput}
+            title={brief.title}
+            brand={brief.brand}
+          />
+          {building === 'true' && <BuildingOverlay briefId={id} />}
+        </div>
       </div>
     </div>
   )

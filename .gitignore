@@ -17,6 +17,8 @@
 .DS_Store
 *.pem
 /coverage
+.wrangler/
+/supabase/.temp/
 
 # debug
 npm-debug.log*
