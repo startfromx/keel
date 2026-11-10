@@ -65,6 +65,66 @@ voice:
     The user received the brief. Optimise for: asking the client the right
     questions without sounding junior, protecting the team from rework.
 
+# ── STARTER GRAPHS (goal → ordered working-node list; output nodes always appended) ──
+# These are the preset goal cards shown on the new-brief screen.
+# node_keys must match keys defined in the nodes section.
+starter_graphs:
+  - key: brief
+    label: Campaign Brief
+    description: Full brief map — research, objectives, message, deliverables, and all outputs.
+    node_keys:
+      - market_facts
+      - competitor_moves
+      - own_data
+      - research_readout
+      - intention
+      - business_problem
+      - objective
+      - rejected_option
+      - audience
+      - reason_to_believe
+      - single_message
+      - mandatories
+      - deliverables
+      - timing
+      - budget
+      - approver
+      - success_measure
+
+  - key: strategy_paper
+    label: Strategy Paper
+    description: Market context, competitive position, and a clear strategic direction. No execution detail.
+    node_keys:
+      - market_facts
+      - competitor_moves
+      - own_data
+      - intention
+      - business_problem
+      - objective
+      - audience
+      - single_message
+      - success_measure
+
+  - key: research_readout
+    label: Research Readout
+    description: Synthesise a research deck — survey, focus group, sales report — into decisions.
+    node_keys:
+      - research_readout
+      - own_data
+      - intention
+      - business_problem
+
+  - key: competitive_review
+    label: Competitive Review
+    description: Map the competitive landscape, identify white space, and frame the strongest counter-move.
+    node_keys:
+      - market_facts
+      - competitor_moves
+      - intention
+      - business_problem
+      - rejected_option
+      - single_message
+
 # ── DOORS (backdrops on the canvas) ──
 doors:
   - { key: research,  label: "Research Interpreter", order: 1, color: teal }
@@ -173,11 +233,49 @@ nodes:
       End with one headline: the single decision this research supports.
 
   # ── DOOR: OBJECTIVE ────────────────────────────────────────
+  - key: intention
+    label: True Intention
+    door: objective
+    requires: [brief_raw]
+    optional: [role, own_data]
+    provides: intention
+    schema:
+      stated_ask: string
+      true_intention: string
+      intention_type: { enum: [brand_exposure, brand_perception, competitive_defense, internal_proof, relationship_management, revenue, launch, other] }
+      signal: string
+      gap: string
+      implication: string
+    status_rules:
+      confirmed: "Client confirmed the real intention explicitly."
+      drafted: "Inferred from signals in the brief; gap marked [CONFIRM] until client agrees."
+      vague: "Brief gives no signals beyond the deliverable itself."
+    prompt: >
+      Read the brief as written. Then ask: why does this person need THIS specific thing,
+      in THIS form, right now?
+
+      Name the stated deliverable in one line. Then name the outcome that would make the
+      client feel the work was genuinely worth it — not what they said, but what success
+      actually looks like to them. These are often different: a request for a billboard is
+      often a need to appear alongside a competitor; a request for a social campaign is
+      sometimes a need to prove digital capability to a sceptical boss.
+
+      Look for signals in the brief: what did they mention first? what did they write with
+      urgency or emotion? what constraint reveals what they actually care about most?
+
+      If the stated ask and the true intention align, say so plainly. If they differ, name
+      the gap in one line. If the intention is political — defending a budget, proving
+      something internally, managing a relationship — note it. It changes what "success"
+      looks like and how the recommendation should be framed.
+
+      Do not invent a gap if none exists. A well-specified brief with a clear outcome is
+      a good sign, not a problem to find.
+
   - key: business_problem
     label: Business problem
     door: objective
     requires: [brief_raw, own_data]
-    optional: [market_facts, competitor_moves, research_findings]
+    optional: [market_facts, competitor_moves, research_findings, intention]
     provides: business_problem
     schema:
       the_ask: string

@@ -1,36 +1,33 @@
 import { redirect } from 'next/navigation'
 import { type Node, type Edge } from '@xyflow/react'
 import { createClient } from '@/lib/supabase/server'
-import { computeLayout } from '@/lib/canvas/layout'
+import { computeLayout, BRIEF_POSITION, GOAL_POSITION } from '@/lib/canvas/layout'
+import { loadRecipeFromFile, getNodeDef } from '@/lib/recipe/loader'
 import { BriefCanvas } from '@/components/canvas/BriefCanvas'
+import { BuildingOverlay } from '@/components/canvas/BuildingOverlay'
 import type { BriefNodeData } from '@/components/canvas/BriefNode'
 
-const DOOR_LABELS: Record<string, string> = {
-  research: 'Research Interpreter',
-  objective: 'Objective Finder',
-  brief: 'Brief Decoder',
-  outputs: 'Outputs',
-}
-
-export default async function CanvasPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CanvasPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ building?: string }>
+}) {
   const { id } = await params
+  const { building } = await searchParams
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/sign-in')
 
-  const [{ data: brief }, { data: dbNodes }, { data: dbEdges }] = await Promise.all([
+  const [{ data: brief }, { data: dbNodes }] = await Promise.all([
     supabase.from('briefs').select('*').eq('id', id).single(),
     supabase.from('nodes').select('*').eq('brief_id', id).order('created_at'),
-    supabase.from('edges').select('*').eq('brief_id', id),
   ])
 
   if (!brief) redirect('/dashboard')
 
-  const positions = computeLayout((dbNodes ?? []).map(n => ({ id: n.id, door: n.door })))
-  const posMap = new Map(positions.map(p => [p.id, p]))
-
-  // Recipe label map (key → human label) — read from recipe or use type_key as fallback
   const LABEL_MAP: Record<string, string> = {
     market_facts: 'Market facts',
     competitor_moves: 'Competitor moves',
@@ -51,13 +48,23 @@ export default async function CanvasPage({ params }: { params: Promise<{ id: str
     red_flags: 'Red flags',
     client_questions: 'Questions for the client',
     reverse_brief: 'Reverse brief',
-    boss_summary: 'Boss view',
+    boss_summary: 'Boss summary',
     team_briefing: 'Creative team briefing',
     private_notes: 'Private notes',
   }
 
-  const flowNodes: Node[] = (dbNodes ?? []).map(n => {
-    const pos = posMap.get(n.id) ?? { x: 0, y: 0 }
+  const positions = computeLayout((dbNodes ?? []).map(n => ({ id: n.id })))
+  const posMap = new Map(positions.map(p => [p.id, p]))
+  const recipe = loadRecipeFromFile()
+  const canvasState = (brief.canvas_state && typeof brief.canvas_state === 'object' && !Array.isArray(brief.canvas_state))
+    ? brief.canvas_state as { nodes?: Record<string, { x?: number; y?: number }>; briefPosition?: { x?: number; y?: number }; goalPosition?: { x?: number; y?: number }; chainIds?: string[]; goalOutput?: string }
+    : {}
+
+  const paletteNodes: Node[] = (dbNodes ?? []).map(n => {
+    const savedPosition = canvasState.nodes?.[n.id]
+    const pos = savedPosition?.x !== undefined && savedPosition.y !== undefined
+      ? { x: savedPosition.x, y: savedPosition.y }
+      : posMap.get(n.id) ?? { x: 0, y: 0 }
     return {
       id: n.id,
       type: 'briefNode',
@@ -69,18 +76,34 @@ export default async function CanvasPage({ params }: { params: Promise<{ id: str
         assumption: n.assumption ?? undefined,
         door: n.door,
         type_key: n.type_key,
+        prompt: getNodeDef(recipe, n.type_key)?.prompt,
+        active: canvasState.chainIds?.includes(n.id) ?? false,
       } satisfies BriefNodeData,
     }
   })
 
-  const flowEdges: Edge[] = (dbEdges ?? []).map(e => ({
-    id: e.id,
-    source: e.from_node,
-    target: e.to_node,
-    type: 'smoothstep',
-    style: { stroke: e.required ? '#94a3b8' : '#cbd5e1', strokeDasharray: e.required ? undefined : '4 4' },
-    animated: false,
-  }))
+  const briefInputNode: Node = {
+    id: 'brief-input',
+    type: 'briefInput',
+    position: canvasState.briefPosition?.x !== undefined && canvasState.briefPosition.y !== undefined
+      ? { x: canvasState.briefPosition.x, y: canvasState.briefPosition.y }
+      : BRIEF_POSITION,
+    data: { brand: brief.brand, briefType: brief.brief_type, raw: brief.brief_raw },
+    draggable: true,
+  }
+
+  const goalNode: Node = {
+    id: 'goal-output',
+    type: 'goalNode',
+    position: canvasState.goalPosition?.x !== undefined && canvasState.goalPosition.y !== undefined
+      ? { x: canvasState.goalPosition.x, y: canvasState.goalPosition.y }
+      : GOAL_POSITION,
+    data: { goal: (brief as Record<string, unknown>).goal ?? 'Campaign Brief', output: canvasState.goalOutput },
+    draggable: true,
+  }
+
+  const flowNodes = [briefInputNode, ...paletteNodes, goalNode]
+  const flowEdges: Edge[] = []
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -93,15 +116,19 @@ export default async function CanvasPage({ params }: { params: Promise<{ id: str
             <span className="ml-2 text-xs text-gray-400">{brief.brand}</span>
           )}
         </div>
-        <div className="ml-auto flex gap-3 text-xs text-gray-400">
-          {Object.entries(DOOR_LABELS).map(([key, label]) => (
-            <span key={key} className="hidden sm:inline">{label}</span>
-          ))}
-        </div>
       </header>
 
       <div className="flex-1 relative">
-        <BriefCanvas initialNodes={flowNodes} initialEdges={flowEdges} />
+        <BriefCanvas
+          briefId={id}
+          initialNodes={flowNodes}
+          initialEdges={flowEdges}
+          initialChainIds={canvasState.chainIds ?? []}
+          initialGoalOutput={canvasState.goalOutput}
+          title={brief.title}
+          brand={brief.brand}
+        />
+        {building === 'true' && <BuildingOverlay briefId={id} />}
       </div>
     </div>
   )

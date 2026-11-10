@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -53,6 +54,17 @@ export default async function DashboardPage() {
     redirect('/auth/sign-in')
   }
 
+  async function deleteBrief(formData: FormData) {
+    'use server'
+    const id = formData.get('id') as string
+    if (!id) return
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) redirect('/auth/sign-in')
+    await supabase.from('briefs').delete().eq('id', id)
+    revalidatePath('/dashboard')
+  }
+
   return (
     <main className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
@@ -68,7 +80,13 @@ export default async function DashboardPage() {
       </header>
 
       <div className="max-w-4xl mx-auto px-6 py-8">
-        <h1 className="text-lg font-semibold text-gray-900 mb-6">Briefs</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-lg font-semibold text-gray-900">Briefs</h1>
+          <div className="flex items-center gap-3">
+            <a href="/dashboard/recipes" className="text-sm text-gray-500 hover:text-gray-900">Recipe Studio</a>
+            <a href="/dashboard/new" className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors">New brief</a>
+          </div>
+        </div>
 
         {!briefs?.length ? (
           <p className="text-sm text-gray-400">No briefs yet.</p>
@@ -78,32 +96,48 @@ export default async function DashboardPage() {
               const health = healthByBrief[brief.id] ?? {}
               const total = Object.values(health).reduce((a, b) => a + b, 0)
               return (
-                <a
+                <div
                   key={brief.id}
-                  href={`/dashboard/briefs/${brief.id}`}
-                  className="bg-white rounded-lg border border-gray-200 px-5 py-4 hover:border-gray-400 hover:shadow-sm transition-all block"
+                  className="group bg-white rounded-lg border border-gray-200 hover:border-gray-400 hover:shadow-sm transition-all flex items-stretch"
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{brief.title}</p>
-                      {brief.brand && (
-                        <p className="text-xs text-gray-400 mt-0.5">{brief.brand}</p>
-                      )}
-                    </div>
-                    {total > 0 && (
-                      <div className="flex gap-1 mt-1">
-                        {Object.entries(STATUS_COLORS).map(([status, color]) =>
-                          health[status] ? (
-                            <span key={status} title={`${health[status]} ${status}`}
-                              className={`${color} text-white text-[10px] px-1.5 py-0.5 rounded`}>
-                              {health[status]}
-                            </span>
-                          ) : null
+                  <a
+                    href={`/dashboard/briefs/${brief.id}`}
+                    className="flex-1 px-5 py-4 block"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{brief.title}</p>
+                        {brief.brand && (
+                          <p className="text-xs text-gray-400 mt-0.5">{brief.brand}</p>
                         )}
                       </div>
-                    )}
+                      {total > 0 && (
+                        <div className="flex gap-1 mt-1">
+                          {Object.entries(STATUS_COLORS).map(([status, color]) =>
+                            health[status] ? (
+                              <span key={status} title={`${health[status]} ${status}`}
+                                className={`${color} text-white text-[10px] px-1.5 py-0.5 rounded`}>
+                                {health[status]}
+                              </span>
+                            ) : null
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </a>
+                  <div className="flex items-center pr-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <form action={deleteBrief}>
+                      <input type="hidden" name="id" value={brief.id} />
+                      <button
+                        type="submit"
+                        title="Delete brief"
+                        className="text-gray-300 hover:text-red-500 transition-colors p-1 text-lg leading-none"
+                      >
+                        ×
+                      </button>
+                    </form>
                   </div>
-                </a>
+                </div>
               )
             })}
           </div>

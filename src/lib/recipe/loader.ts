@@ -33,6 +33,13 @@ export interface RecipeNodeDef {
   rules?: string
 }
 
+export interface StarterGraph {
+  key: string
+  label: string
+  description: string
+  node_keys: string[]
+}
+
 export interface RecipeTest {
   name: string
   role: string
@@ -58,6 +65,7 @@ export interface Recipe {
     provides: string[]
     build_prompt: string
   }
+  starter_graphs: StarterGraph[]
   nodes: RecipeNodeDef[]
   threads: {
     context: string
@@ -87,4 +95,13 @@ export function getNodesByDoor(recipe: Recipe, door: string): RecipeNodeDef[] {
 
 export function getDoorOrder(recipe: Recipe): string[] {
   return [...recipe.doors].sort((a, b) => a.order - b.order).map(d => d.key)
+}
+
+export function getStarterGraph(recipe: Recipe, key: string): StarterGraph | undefined {
+  return recipe.starter_graphs?.find(g => g.key === key)
+}
+
+/** All non-output node types — the composable palette. */
+export function getNodePalette(recipe: Recipe): RecipeNodeDef[] {
+  return recipe.nodes.filter(n => n.door !== 'outputs')
 }

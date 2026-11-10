@@ -1,4 +1,5 @@
-- Read PLAN.md and brief-recipe-v1.yaml before any work.
+- Read PLAN.md, STATUS.md, and brief-recipe-v1.yaml before any work.
+- Update STATUS.md at meaningful checkpoints: when starting or ending a milestone, after validation, when discovering a blocker, and before handoff. Keep it factual and concise; do not update it for every chat message.
 - Each milestone has a spec in tasks/M<n>-spec.md; read it before starting.
 - Engine code must never contain brief-specific logic; everything comes from the recipe.
 - Rules engine is pure TypeScript with unit tests; AI never decides statuses alone.
