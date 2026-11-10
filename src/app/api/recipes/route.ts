@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server'
-import { readFileSync } from 'fs'
-import { join } from 'path'
-import { loadRecipeFromFile, parseRecipe } from '@/lib/recipe/loader'
+import { getDefaultRecipeYaml, loadRecipeFromFile, parseRecipe } from '@/lib/recipe/loader'
 import { createClient } from '@/lib/supabase/server'
 
 export async function GET() {
@@ -11,7 +9,7 @@ export async function GET() {
 
   const recipe = loadRecipeFromFile()
   return NextResponse.json({
-    source_yaml: readFileSync(join(process.cwd(), 'brief-recipe-v1.yaml'), 'utf8'),
+    source_yaml: getDefaultRecipeYaml(),
     recipe,
   })
 }

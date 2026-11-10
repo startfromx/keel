@@ -11,6 +11,8 @@ Updated: 2026-11-10
 - Migration 006 (`canvas_state`) has been applied; canvas persistence is ready for authenticated runtime verification.
 - Remaining environment blocker: migration 005 still needs to be applied before authenticated goal-first intake testing.
 - Latest handoff: section-level node actions use the official Lucide wand trigger. Paragraph-level proposals are targeted by content path and render inline with Apply here/Dismiss; Add answer and Search online can propose a replacement without changing unrelated node content.
+- Production fix: the Cloudflare Worker was failing on authenticated project pages because the canvas loaded `brief-recipe-v1.yaml` with runtime `fs.readFileSync`, which Workers do not implement. The default recipe is now bundled into the app; local file loading remains available when an explicit path is supplied.
+- Production build validation: `npx tsc --noEmit`, `npm test -- --run` (20 tests), `git diff --check`, and `npm run build:cf` pass.
 - Ask client generates a separate client-facing question card with Copy and Add to Questions for client; it does not revise the paragraph. Citation-only sources show Find source ↗, while real HTTP/HTTPS URLs open directly.
 - Clicking outside attention tooltips closes them; attention markers are left-aligned colored text and Leave unresolved collapses to a small unresolved indicator.
 - Latest validation after the comment UI changes: `npx tsc --noEmit` and `git diff --check` pass.

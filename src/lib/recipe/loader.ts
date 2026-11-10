@@ -1,6 +1,7 @@
 import { parse } from 'yaml'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { DEFAULT_RECIPE_YAML } from './defaultRecipe'
 
 export interface RecipeStatus {
   label: string
@@ -81,8 +82,12 @@ export function parseRecipe(yaml: string): Recipe {
 
 /** Load recipe from the filesystem. For tests and local dev only — not for Cloudflare Workers. */
 export function loadRecipeFromFile(path?: string): Recipe {
-  const filePath = path ?? join(process.cwd(), 'brief-recipe-v1.yaml')
-  return parseRecipe(readFileSync(filePath, 'utf8'))
+  if (!path) return parseRecipe(DEFAULT_RECIPE_YAML)
+  return parseRecipe(readFileSync(path, 'utf8'))
+}
+
+export function getDefaultRecipeYaml(): string {
+  return DEFAULT_RECIPE_YAML
 }
 
 export function getNodeDef(recipe: Recipe, key: string): RecipeNodeDef | undefined {
